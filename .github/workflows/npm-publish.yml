@@ -8,26 +8,40 @@ on:
     types: [created]
 
 jobs:
-  build:
+  Build-Publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2.4.0
+        id: pnpm-install
         with:
-          node-version: 16
-      - run: npm ci
-      - run: npm test
+          version: latest
+          run_install: false
 
-  publish-npm:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          pnpm store path
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache@v3
+        name: Setup pnpm cache
         with:
-          node-version: 16
-          registry-url: https://registry.npmjs.org/
-      - run: npm ci
-      - run: npm publish
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install Dependencies
+        run: pnpm i
+
+      - name: Build package
+        run: pnpm run build
+
+      - name: SetupAuth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
+      - name: Publish package on NPM 📦
+        run: pnpm publish
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
